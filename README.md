@@ -2,15 +2,17 @@
 
 最近在爱加密加固之后，用xposed去打印日志，开始用log.i一直打不出来，以为是插件有问题，后来才发现爱加密加固之后只有Log.e才能够打出日志。虽然Log.e打日志也可以，但是作为重度强迫症患者，一堆错误的日志看得很头疼
 
+> 声明一下，我水平有限，不要骂我，谢谢
+
 ## 猜测
 
-我试着用dlsym去调用Log在native层对应的方法android_util_Log_println_native，以及在其中调用的__android_log_buf_write方法直接去写日志，发现并不能够吧日志写出了，所以爱加密应该劫持了这些函数，并且在不是错误日志的时候都不把日志打出来
+我试着用dlsym去调用Log在native层对应的方法`android_util_Log_println_native`，以及在其中调用的`__android_log_buf_write`方法直接去写日志，发现并不能够吧日志写出了，所以爱加密应该劫持了这些函数，并且在不是错误日志的时候都不把日志打出来
 
 ## Log的原理
 
-你可以跟踪log的源码，然后分析其原理，其实打印日志就是对/dev/log/下面的设备文件进行操作，在Log的d,i,v,w,e这些方法中都是写到/dev/log/main这个文件里面的。我们先简单分析一下源码
+你可以跟踪log的源码，然后分析其原理，其实打印日志就是对/dev/log/下面的设备文件进行操作，在Log的d,i,v,w,e这些方法中都是写到`/dev/log/main`这个文件里面的。我们先简单分析一下源码
 
-首先是java层的代码代码位置在frameworks\base\core\java\android\util\Log.java。我们可以发现，打印日志最终都是调用的这个native方法
+首先是java层的代码代码位置在`frameworks\base\core\java\android\util\Log.java`。我们可以发现，打印日志最终都是调用的这个native方法
 
 ```java
 ...
@@ -23,7 +25,7 @@ public static int i(String tag, String msg) {
             int priority, String tag, String msg);
 ```
 
-我们看这个native方法实现的地方，在安卓源码的frameworks\base\core\jni\android_util_Log.cpp这个位置，在这个里面，发现就只是调用了__android_log_buf_write这个方法来打印日志，前面做了一些判断
+我们看这个native方法实现的地方，在安卓源码的`frameworks\base\core\jni\android_util_Log.cpp`这个位置，在这个里面，发现就只是调用了`__android_log_buf_write`这个方法来打印日志，前面做了一些判断
 
 ```cpp
 /*
@@ -60,7 +62,7 @@ static jint android_util_Log_println_native(JNIEnv* env, jobject clazz,
 }
 ```
 
-接下来我们继续跟踪到__android_log_buf_write方法定义的位置，在安卓源码的system\core\liblog\logd_write.c中，这里在前面讲log的等级以及tag和log的消息装在一个结构体数组里面，然后调用了write_to_log打印日志
+接下来我们继续跟踪到`__android_log_buf_write`方法定义的位置，在安卓源码的`system\core\liblog\logd_write.c`中，这里在前面讲log的等级以及tag和log的消息装在一个结构体数组里面，然后调用了write_to_log打印日志
 
 ```cpp
 int __android_log_buf_write(int bufID, int prio, const char *tag, const char *msg)
@@ -99,7 +101,7 @@ int __android_log_buf_write(int bufID, int prio, const char *tag, const char *ms
 }
 ```
 
-我们再看write_to_log这个方法，这是前面定义的一个函数指针，他的初始值是指向`__write_to_log_init`这个方法。这里面重点来了，他做了一下初始化，就是把日志这些设备文件打开，然后重新把`write_to_log`指针指向`__write_to_log_kernel`这个方法，也就是保证初始化完成之后，再使用这个函数指针调用函数的时候就不去做设备文件打开的操作了。
+我们再看`write_to_log`这个方法，这是前面定义的一个函数指针，他的初始值是指向`__write_to_log_init`这个方法。这里面重点来了，他做了一下初始化，就是把日志这些设备文件打开，然后重新把`write_to_log`指针指向`__write_to_log_kernel`这个方法，也就是保证初始化完成之后，再使用这个函数指针调用函数的时候就不去做设备文件打开的操作了。
 
 ```cpp
 static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
@@ -261,6 +263,116 @@ JNIEXPORT jint JNICALL Java_com_smartdone_printlog_Log_println_1native
 ```
 
 写好动态库之后，在xposed插件中动态的加载起来，然后再使用自己实现的log接口去写。
+
+自己定义的log如下
+
+```java
+public class Log {
+
+    /**
+     * Priority constant for the println method; use Log.v.
+     */
+    public static final int VERBOSE = 2;
+
+    /**
+     * Priority constant for the println method; use Log.d.
+     */
+    public static final int DEBUG = 3;
+
+    /**
+     * Priority constant for the println method; use Log.i.
+     */
+    public static final int INFO = 4;
+
+    /**
+     * Priority constant for the println method; use Log.w.
+     */
+    public static final int WARN = 5;
+
+    /**
+     * Priority constant for the println method; use Log.e.
+     */
+    public static final int ERROR = 6;
+
+    /**
+     * Priority constant for the println method.
+     */
+    public static final int ASSERT = 7;
+
+    public static final int LOG_ID_MAIN = 0;
+
+    public static int v(String tag, String msg) {
+        return println_native(LOG_ID_MAIN, VERBOSE, tag, msg);
+    }
+
+    public static int d(String tag, String msg) {
+        return println_native(LOG_ID_MAIN, DEBUG, tag, msg);
+    }
+
+    public static int i(String tag, String msg) {
+        return println_native(LOG_ID_MAIN, INFO, tag, msg);
+    }
+
+    public static int w(String tag, String msg) {
+        return println_native(LOG_ID_MAIN, WARN, tag, msg);
+    }
+
+    public static int e(String tag, String msg) {
+        return println_native(LOG_ID_MAIN, ERROR, tag, msg);
+    }
+
+    public static native int println_native(int bufID, int priority, String tag, String msg);
+}
+```
+
+一个测试的xposed插件，首先使用System.load将动态库加载起来，然后在调用java层对应的方法打印日志，这里使用自定义的log和android原始的log来打印
+可以发现系统log出来Log.e还能打出log，其他的都不能，而自定义的可以。xposed示例如下
+
+```java
+public class Main implements IXposedHookLoadPackage {
+    @Override
+    public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam loadPackageParam) throws Throwable {
+        if (loadPackageParam.packageName.equals("test.packer.naja.com.demo")) {
+            XposedHelpers.findAndHookMethod("com.shell.SuperApplication", loadPackageParam.classLoader, "attachBaseContext", Context.class, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    Context context = (Context) param.args[0];
+                    Context plicontext = context.createPackageContext("com.smartdone.printlog", Context.CONTEXT_IGNORE_SECURITY);
+                    InputStream in = plicontext.getAssets().open("libslog.so");
+                    File so = new File(context.getFilesDir(), "libslog.so");
+                    if (!so.getParentFile().exists()) {
+                        so.getParentFile().mkdirs();
+                    }
+                    FileOutputStream fout = new FileOutputStream(so);
+                    byte[] buffer = new byte[1024];
+                    int len = in.read(buffer);
+                    while (len > 0) {
+                        fout.write(buffer);
+                        len = in.read(buffer);
+                    }
+                    fout.flush();
+                    fout.close();
+                    in.close();
+                    android.util.Log.e("LOGTEST", "write so to /data/data/... success");
+                    System.load(so.getAbsolutePath());
+                    Log.i("LOGTEST", "this is a test");
+                    Log.v("LOGTEST", "this is a test");
+                    Log.d("LOGTEST", "this is a test");
+                    Log.w("LOGTEST", "this is a test");
+                    Log.e("LOGTEST", "this is a test");
+
+                    android.util.Log.i("LOGTEST", "this is a test from origin log");
+                    android.util.Log.v("LOGTEST", "this is a test from origin log");
+                    android.util.Log.d("LOGTEST", "this is a test from origin log");
+                    android.util.Log.w("LOGTEST", "this is a test from origin log");
+                    android.util.Log.e("LOGTEST", "this is a test from origin log");
+                }
+            });
+        }
+    }
+}
+
+```
 
 最后得到的效果如下
 
