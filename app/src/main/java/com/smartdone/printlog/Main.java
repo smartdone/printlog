@@ -10,6 +10,7 @@ import java.lang.reflect.Method;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
@@ -43,17 +44,14 @@ public class Main implements IXposedHookLoadPackage {
                     in.close();
                     android.util.Log.e("LOGTEST", "write so to /data/data/... success");
                     System.load(so.getAbsolutePath());
-                    Log.i("LOGTEST", "this is a test");
-                    Log.v("LOGTEST", "this is a test");
-                    Log.d("LOGTEST", "this is a test");
-                    Log.w("LOGTEST", "this is a test");
-                    Log.e("LOGTEST", "this is a test");
+                    Class<?> log = XposedHelpers.findClass("android.util.Log", context.getClassLoader());
+                    MethodReplaceImpl methodReplace = new MethodReplaceImpl();
+                    XposedHelpers.findAndHookMethod(log, "i", methodReplace);
+                    XposedHelpers.findAndHookMethod(log, "v", methodReplace);
+                    XposedHelpers.findAndHookMethod(log, "e", methodReplace);
+                    XposedHelpers.findAndHookMethod(log, "w", methodReplace);
+                    XposedHelpers.findAndHookMethod(log, "d", methodReplace);
 
-                    android.util.Log.i("LOGTEST", "this is a test from origin log");
-                    android.util.Log.v("LOGTEST", "this is a test from origin log");
-                    android.util.Log.d("LOGTEST", "this is a test from origin log");
-                    android.util.Log.w("LOGTEST", "this is a test from origin log");
-                    android.util.Log.e("LOGTEST", "this is a test from origin log");
                 }
             });
         }
