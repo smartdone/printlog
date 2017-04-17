@@ -2,6 +2,7 @@ package com.smartdone.printlog;
 
 import android.app.Application;
 import android.content.Context;
+import android.util.*;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -21,7 +22,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class Main implements IXposedHookLoadPackage {
     @Override
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam loadPackageParam) throws Throwable {
-        if (loadPackageParam.packageName.equals("test.packer.naja.com.demo")) {
+        if (loadPackageParam.packageName.equals("com.smartdone.logtests")) {
             XposedHelpers.findAndHookMethod("com.shell.SuperApplication", loadPackageParam.classLoader, "attachBaseContext", Context.class, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -46,11 +47,11 @@ public class Main implements IXposedHookLoadPackage {
                     System.load(so.getAbsolutePath());
                     Class<?> log = XposedHelpers.findClass("android.util.Log", context.getClassLoader());
                     MethodReplaceImpl methodReplace = new MethodReplaceImpl();
-                    XposedHelpers.findAndHookMethod(log, "i", methodReplace);
-                    XposedHelpers.findAndHookMethod(log, "v", methodReplace);
-                    XposedHelpers.findAndHookMethod(log, "e", methodReplace);
-                    XposedHelpers.findAndHookMethod(log, "w", methodReplace);
-                    XposedHelpers.findAndHookMethod(log, "d", methodReplace);
+                    XposedHelpers.findAndHookMethod(log, "i", String.class, String.class, methodReplace);
+                    XposedHelpers.findAndHookMethod(log, "v", String.class, String.class, methodReplace);
+                    XposedHelpers.findAndHookMethod(log, "e", String.class, String.class, methodReplace);
+                    XposedHelpers.findAndHookMethod(log, "w", String.class, String.class, methodReplace);
+                    XposedHelpers.findAndHookMethod(log, "d", String.class, String.class, methodReplace);
 
                 }
             });
